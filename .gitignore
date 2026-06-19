@@ -1,0 +1,25 @@
+# Local Python environments
+vnv/
+.venv/
+venv/
+env/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Node dependencies/builds
+node_modules/
+dist/
+dist-ssr/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+

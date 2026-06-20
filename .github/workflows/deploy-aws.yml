@@ -1,0 +1,129 @@
+name: Deploy to AWS EC2
+
+# Runs only when code is pushed/merged to main.
+# CI (ci.yml) must pass first — enforced by "needs: ci".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # allow manual trigger from GitHub UI
+
+jobs:
+  # ── Re-run CI as a gate ────────────────────────────────────────────────────
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
+  # ── Build & ship frontend ─────────────────────────────────────────────────
+  # Builds the React app with real production env vars, then rsyncs the dist/
+  # folder to /opt/kgpedia/dist/ on EC2. FastAPI reads from that directory
+  # via a Docker volume mount — no Nginx involved.
+  deploy-frontend:
+    name: Build frontend → ship to EC2
+    runs-on: ubuntu-latest
+    needs: ci
+    defaults:
+      run:
+        working-directory: profchat-frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: profchat-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build with real production env vars from GitHub Secrets.
+      # VITE_* values are baked into the JS bundle at build time.
+      - name: Build (production)
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_WS_URL: ${{ secrets.VITE_WS_URL }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+        run: npm run build
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      # Sync built files to the dist directory that Docker volume-mounts into
+      # the FastAPI container. --delete removes stale assets from prior builds.
+      - name: Upload frontend files to EC2
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            dist/ \
+            ubuntu@${{ secrets.EC2_HOST }}:/opt/kgpedia/dist/
+
+  # ── Deploy backend ──────────────────────────────────────────────────────────
+  # Waits for deploy-frontend so /opt/kgpedia/dist/ is populated before the
+  # container starts (important on first deploy or after a container wipe).
+  deploy-backend:
+    name: Deploy backend → EC2 Docker
+    runs-on: ubuntu-latest
+    needs: [ci, deploy-frontend]
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      # SSH into EC2:
+      #   1. Pull the latest backend code
+      #   2. Rebuild the Docker image
+      #   3. Swap the container (stop old → start new)
+      #   4. Volume-mount /opt/kgpedia/dist into /app/dist (read-only)
+      #   5. Expose port 80 directly — no Nginx in front
+      - name: Pull, rebuild, restart backend on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} bash -s << 'ENDSSH'
+            set -euo pipefail
+
+            echo "--- Pulling latest code ---"
+            cd /opt/kgpedia
+            git pull origin main
+
+            echo "--- Building Docker image ---"
+            docker build -t kgpedia-backend ./profchat-backend/
+
+            echo "--- Swapping container ---"
+            docker stop kgpedia-backend 2>/dev/null || true
+            docker rm   kgpedia-backend 2>/dev/null || true
+            docker run -d \
+              --name kgpedia-backend \
+              --env-file /opt/kgpedia/.env \
+              -p 80:8000 \
+              -v /opt/kgpedia/dist:/app/dist:ro \
+              --restart unless-stopped \
+              kgpedia-backend
+
+            echo "--- Waiting for backend to come up ---"
+            for i in $(seq 1 10); do
+              if curl -sf http://localhost/health > /dev/null; then
+                echo "Backend is healthy."
+                break
+              fi
+              echo "  attempt $i/10 — waiting 3s..."
+              sleep 3
+            done
+
+            echo "--- Cleaning up dangling images ---"
+            docker image prune -f
+          ENDSSH

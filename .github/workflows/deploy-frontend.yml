@@ -1,8 +1,9 @@
-name: Deploy frontend to GitHub Pages
+name: Deploy frontend to GitHub Pages (disabled — using EC2 via deploy-aws.yml)
 
+# Auto-deploy to GitHub Pages is disabled because the app now deploys
+# to EC2 via deploy-aws.yml. Trigger manually from the GitHub Actions UI
+# only if you want to restore a GitHub Pages preview.
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
 
 permissions:

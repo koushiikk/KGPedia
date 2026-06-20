@@ -6,9 +6,15 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+# Frontend static files are built by CI and placed in this directory.
+# In development this folder won't exist — the API still works normally.
+DIST_DIR = Path(__file__).parent / "dist"
 
 from config.settings import CORS_ORIGINS
 from routers.session_router import router as session_router
@@ -37,11 +43,6 @@ app.add_middleware(
 
 app.include_router(session_router)
 app.include_router(professions_router)
-
-
-@app.get("/")
-async def root():
-    return {"message": "ProSim API is running", "version": "1.0.0"}
 
 
 @app.get("/health")
@@ -241,3 +242,26 @@ async def ws_chat(websocket: WebSocket):
             pass
         if chat_session:
             deregister_session(chat_session.session_id)
+
+
+# ── Frontend SPA (must be registered LAST) ────────────────────────────────────
+# All routes above (/api/*, /health, /ws/*) are matched first by FastAPI.
+# This catch-all only fires for paths that no API route claimed.
+#
+# How it works:
+#   /assets/index-abc123.js  → DIST_DIR/assets/index-abc123.js exists → serve it
+#   /                        → no file at DIST_DIR/ → serve index.html (React Router)
+#   /chat/some-session-id    → no file → serve index.html (React Router handles it)
+#
+# In local development DIST_DIR won't exist yet — FastAPI still works normally
+# as a pure API server; the Vite dev server handles the frontend separately.
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    candidate = DIST_DIR / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)
+    index = DIST_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return {"message": "ProSim API is running", "version": "1.0.0",
+            "note": "Frontend not built. Run: cd profchat-frontend && npm run build"}

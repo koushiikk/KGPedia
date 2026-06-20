@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: kgpedia-backend
+    runtime: docker
+    dockerfilePath: ./profchat-backend/Dockerfile
+    dockerContext: ./profchat-backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: LLM_MAIN_MODEL
+        value: gpt-4o
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: GEMINI_GENERATOR_MODEL
+        value: gemini-2.5-flash
+      - key: CORS_ORIGINS
+        sync: false
+      - key: APP_ENV
+        value: production

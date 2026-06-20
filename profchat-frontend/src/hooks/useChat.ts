@@ -11,6 +11,7 @@ import {
   appendSessionToCache,
   saveLastSummary,
   loadLastSummary,
+  clearLastSummary,
 } from "@/utils/sessionCache";
 
 let msgCounter = 0;
@@ -136,7 +137,11 @@ export function useChat() {
   }, [addMessage, updateLastMessage, setIsAiTyping, setSessionSummary, setConnectionStatus, navigate]);
 
   // ── Start a new session ───────────────────────────────────────────────────
-  const startSession = useCallback(async (profession: Profession, intake: IntakeData) => {
+  const startSession = useCallback(async (
+    profession: Profession,
+    intake: IntakeData,
+    options: { resetContext?: boolean } = {}
+  ) => {
     if (!user) return;
 
     setActiveProfession(profession);
@@ -176,7 +181,11 @@ export function useChat() {
 
       // Pass the cached "last session summary" for this user+profession so
       // the backend can generate a returning-user welcome even after a restart.
-      const cachedLastSummary = loadLastSummary(user.uid, profession.id);
+      // Fresh starts clear local memory and ask the backend to skip persisted context.
+      if (options.resetContext) {
+        clearLastSummary(user.uid, profession.id);
+      }
+      const cachedLastSummary = options.resetContext ? "" : loadLastSummary(user.uid, profession.id);
 
       await socketService.fireAndForget({
         type: "initialize",
@@ -188,6 +197,7 @@ export function useChat() {
         career_goals: intake.career_goals,
         user_first_name: user.displayName?.split(" ")[0] || "",
         last_session_summary: cachedLastSummary,
+        reset_context: Boolean(options.resetContext),
       });
 
       setConnectionStatus("connected");

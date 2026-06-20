@@ -81,3 +81,9 @@ export function loadLastSummary(userId: string, professionId: string): string {
     return "";
   }
 }
+
+export function clearLastSummary(userId: string, professionId: string): void {
+  try {
+    localStorage.removeItem(lastSummaryKey(userId, professionId));
+  } catch { /* ignore */ }
+}

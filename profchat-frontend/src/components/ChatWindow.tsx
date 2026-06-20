@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Send, X, AlertCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Send, X, AlertCircle, RefreshCw, Settings } from "lucide-react";
 import type { ChatMessage, ConnectionStatus } from "@/types/chat";
 import type { Profession } from "@/config/professions";
 import MessageBubble from "./MessageBubble";
@@ -14,6 +14,7 @@ interface ChatWindowProps {
   onEndSession: () => void;
   onBack: () => void;
   onRetry?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export default function ChatWindow({
@@ -25,6 +26,7 @@ export default function ChatWindow({
   onEndSession,
   onBack,
   onRetry,
+  onOpenSettings,
 }: ChatWindowProps) {
   const [input, setInput] = useState("");
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -72,6 +74,16 @@ export default function ChatWindow({
           </div>
           <p className="text-xs text-slate-400 truncate">{profession.scenario}</p>
         </div>
+
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="text-slate-400 hover:text-blue-400 transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+            title="Session settings"
+          >
+            <Settings size={18} />
+          </button>
+        )}
 
         <button
           onClick={() => setShowEndConfirm(true)}

@@ -105,13 +105,17 @@ async def ws_chat(websocket: WebSocket):
                 chat_session.user_background = body.get("user_background", "")
                 chat_session.career_goals = body.get("career_goals", "")
                 chat_session.user_first_name = body.get("user_first_name", "")
+                reset_context = bool(body.get("reset_context", False))
 
                 # Load last session summary for returning user context.
                 # Frontend passes a cached summary (from localStorage) which
                 # takes priority — this keeps context even if the backend
                 # restarted and lost its in-memory fallback store.
                 client_last_summary = body.get("last_session_summary", "").strip()
-                if client_last_summary:
+                if reset_context:
+                    chat_session.last_session_summary = ""
+                    logger.info(f"[WS] Context reset requested for session {session_id}")
+                elif client_last_summary:
                     chat_session.last_session_summary = client_last_summary
                 else:
                     try:

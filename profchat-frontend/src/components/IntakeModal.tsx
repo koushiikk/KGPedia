@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, Briefcase, ChevronRight } from "lucide-react";
 import type { Profession } from "@/config/professions";
 import type { IntakeData } from "@/store/chatStore";
-import { loadSavedIntake, saveIntake } from "@/utils/intakeStorage";
+import { EXPERIENCE_OPTIONS, loadSavedIntake, saveIntake } from "@/utils/intakeStorage";
 
 interface IntakeModalProps {
   profession: Profession;
@@ -11,18 +11,9 @@ interface IntakeModalProps {
   onClose: () => void;
 }
 
-// Values match backend _resolve_session_mode expectations exactly:
-//   exploring / some_exposure → explore mode (Q&A)
-//   in_training / early_career → scenario mode (immersive simulation)
-const EXPERIENCE_OPTIONS = [
-  { value: "in_training",   label: "Student / learning the basics" },
-  { value: "exploring",     label: "Exploring if this career fits me" },
-  { value: "some_exposure", label: "Considering a career change" },
-  { value: "early_career",  label: "Already working in this area" },
-];
 
 export default function IntakeModal({ profession, userId, onSubmit, onClose }: IntakeModalProps) {
-  const saved = loadSavedIntake(userId);
+  const saved = loadSavedIntake(userId, profession.id);
   const [experienceLevel, setExperienceLevel] = useState(saved?.experience_level ?? "");
   const [background, setBackground] = useState(saved?.user_background ?? "");
   const [goals, setGoals] = useState(saved?.career_goals ?? "");
@@ -39,7 +30,7 @@ export default function IntakeModal({ profession, userId, onSubmit, onClose }: I
       user_background: background.trim(),
       career_goals: goals.trim(),
     };
-    saveIntake(userId, intake);
+    saveIntake(userId, profession.id, intake);
     onSubmit(intake);
   }
 

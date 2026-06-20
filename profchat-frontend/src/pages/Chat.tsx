@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useChatStore } from "@/store/chatStore";
 import { useChat } from "@/hooks/useChat";
 import { socketService } from "@/services/socketService";
 import ChatWindow from "@/components/ChatWindow";
+import SessionSettingsModal from "@/components/SessionSettingsModal";
 
 export default function Chat() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -15,6 +16,8 @@ export default function Chat() {
   const connectionStatus = useChatStore((s) => s.connectionStatus);
   const isAiTyping = useChatStore((s) => s.isAiTyping);
   const resetChat = useChatStore((s) => s.resetChat);
+  const intakeData = useChatStore((s) => s.intakeData);
+  const [showSettings, setShowSettings] = useState(false);
 
   const { sendMessage, endSession, startSession } = useChat();
 
@@ -49,16 +52,37 @@ export default function Chat() {
     }
   }
 
+  function handleSettingsStart(nextIntake: NonNullable<typeof intakeData>, options?: { resetContext?: boolean }) {
+    if (!activeProfession) return;
+    setShowSettings(false);
+    socketService.reset();
+    startSession(activeProfession, nextIntake, options);
+  }
+
   return (
-    <ChatWindow
-      profession={activeProfession}
-      messages={messages}
-      connectionStatus={connectionStatus}
-      isAiTyping={isAiTyping}
-      onSendMessage={sendMessage}
-      onEndSession={endSession}
-      onBack={handleBack}
-      onRetry={handleRetry}
-    />
+    <>
+      <ChatWindow
+        profession={activeProfession}
+        messages={messages}
+        connectionStatus={connectionStatus}
+        isAiTyping={isAiTyping}
+        onSendMessage={sendMessage}
+        onEndSession={endSession}
+        onBack={handleBack}
+        onRetry={handleRetry}
+        onOpenSettings={() => setShowSettings(true)}
+      />
+
+      {showSettings && intakeData && (
+        <SessionSettingsModal
+          profession={activeProfession}
+          userId={session.userId}
+          intake={intakeData}
+          startLabel="Apply and restart session"
+          onStart={handleSettingsStart}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+    </>
   );
 }

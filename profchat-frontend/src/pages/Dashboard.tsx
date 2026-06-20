@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Briefcase, LogOut, User, History, Settings } from "lucide-react";
+import { useState } from "react";
+import { Briefcase, LogOut, User, History } from "lucide-react";
 import { PROFESSIONS } from "@/config/professions";
 import type { Profession } from "@/config/professions";
 import ProfessionCard from "@/components/ProfessionCard";
@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useChat } from "@/hooks/useChat";
 import type { IntakeData } from "@/store/chatStore";
-import { loadSavedIntake, clearSavedIntake, EXPERIENCE_LABELS } from "@/utils/intakeStorage";
+import { loadSavedIntake } from "@/utils/intakeStorage";
 
 export default function Dashboard() {
   const { user, loading, logout } = useAuth();
@@ -20,42 +20,29 @@ export default function Dashboard() {
   const [showHistory, setShowHistory] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [selectedProfession, setSelectedProfession] = useState<Profession | null>(null);
-  // Track saved intake per user. Cannot use a lazy initializer because
-  // `user` is null during the first render (Firebase auth is async).
-  // We load from localStorage once user resolves, and clear when they sign out.
-  const [savedIntake, setSavedIntake] = useState<IntakeData | null>(null);
-  useEffect(() => {
-    if (user) {
-      setSavedIntake(loadSavedIntake(user.uid));
-    } else {
-      setSavedIntake(null);
-    }
-  }, [user?.uid]);
 
   function handleCardClick(profession: Profession) {
     if (!user) {
       setShowAuth(true);
       return;
     }
+
+    const savedIntake = loadSavedIntake(user.uid, profession.id);
     if (savedIntake) {
-      // Preference already saved — skip the modal and start immediately
       startSession(profession, savedIntake);
-    } else {
-      setSelectedProfession(profession);
+      return;
     }
+
+    setSelectedProfession(profession);
   }
 
   function handleIntakeSubmit(intake: IntakeData) {
     if (!selectedProfession || !user) return;
-    setSavedIntake(intake);
     setSelectedProfession(null);
     startSession(selectedProfession, intake);
   }
 
-  function handleResetPreference() {
-    if (user) clearSavedIntake(user.uid);
-    setSavedIntake(null);
-  }
+
 
   if (loading) {
     return (
@@ -80,22 +67,6 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                {/* Saved experience level badge */}
-                {savedIntake && (
-                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5">
-                    <span className="text-slate-400 text-xs">
-                      {EXPERIENCE_LABELS[savedIntake.experience_level] ?? savedIntake.experience_level}
-                    </span>
-                    <button
-                      onClick={handleResetPreference}
-                      title="Change experience level"
-                      className="text-slate-500 hover:text-blue-400 transition-colors"
-                    >
-                      <Settings size={12} />
-                    </button>
-                  </div>
-                )}
-
                 {history.length > 0 && (
                   <button
                     onClick={() => setShowHistory(!showHistory)}
@@ -218,7 +189,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Intake Modal */}
+      {/* First-time preference modal */}
       {selectedProfession && user && (
         <IntakeModal
           profession={selectedProfession}
@@ -227,6 +198,7 @@ export default function Dashboard() {
           onClose={() => setSelectedProfession(null)}
         />
       )}
+
 
       {/* Auth Modal */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}

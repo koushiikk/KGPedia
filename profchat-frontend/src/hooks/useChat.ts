@@ -201,6 +201,10 @@ export function useChat() {
       });
 
       setConnectionStatus("connected");
+      // Show typing indicator while the backend generates the welcome message
+      // (LLM call can take 2-5s). handleWsMessage already calls setIsAiTyping(false)
+      // on every complete_response, so this clears automatically.
+      setIsAiTyping(true);
     } catch (err) {
       console.error("Failed to start session:", err);
       setConnectionStatus("error");
